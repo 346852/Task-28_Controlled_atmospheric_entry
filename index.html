@@ -1,1016 +1,1104 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Python на GitHub Pages</title>
-    <!-- Подключаем PyScript -->
-    <link rel="stylesheet" href="https://pyscript.net" />
-    <script type="module" src="https://pyscript.net"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Баллистический вход в атмосферу</title>
+<style>
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  color: #172638;
+  background: #eef2f6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+header { background: #14283f; color: white; padding: 20px; }
+header h1 { margin: 0 0 8px; font-size: clamp(21px, 4vw, 30px); }
+header p { margin: 0; color: #d1dfed; max-width: 1000px; }
+main {
+  max-width: 1500px; margin: auto; padding: 16px;
+  display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px;
+}
+.panel {
+  background: white; border-radius: 12px;
+  padding: 16px; box-shadow: 0 2px 10px #14283f0d;
+  min-width: 0;
+}
+h2 { font-size: 19px; margin: 0 0 14px; }
+h3 { font-size: 16px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+label { display: block; font-size: 13px; }
+input, select, button { font: inherit; }
+input[type=number], select {
+  display: block; width: 100%; margin-top: 5px;
+  padding: 10px; border: 1px solid #b6c3d1; border-radius: 7px;
+  background: white; color: #172638; min-height: 44px;
+}
+button {
+  border: 0; border-radius: 7px; padding: 11px 14px;
+  min-height: 44px; cursor: pointer;
+  background: #e6edf5; color: #19334f;
+}
+button.primary { background: #176bc0; color: white; }
+button.danger { background: #b3333d; color: white; }
+button:disabled { opacity: .45; cursor: default; }
+.actions { display: grid; gap: 8px; margin-top: 16px; }
+details { margin-top: 16px; }
+summary { cursor: pointer; padding: 10px 0; font-weight: 600; }
+.note { font-size: 13px; line-height: 1.5; color: #546578; }
+#status { margin: 12px 0 6px; min-height: 22px; }
+progress { width: 100%; height: 12px; }
+.tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 12px; }
+.tabs button { white-space: nowrap; }
+.tabs button.active { background: #176bc0; color: white; }
+.view { display: none; }
+.view.active { display: block; }
+.chart { width: 100%; height: 390px; display: block; }
+.playback {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  margin-top: 12px;
+}
+.playback label { min-width: 120px; }
+#seek { width: 100%; margin: 12px 0; }
+#frameInfo { font-size: 14px; min-height: 24px; }
+.metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.metric { background: #f1f5f9; border-radius: 8px; padding: 12px; }
+.metric small { display: block; color: #596a7d; margin-bottom: 5px; }
+.metric strong { font-size: 18px; }
+.good { color: #137a49; }
+.bad { color: #b12e38; }
+pre {
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: inherit; line-height: 1.55; font-size: 14px;
+}
+.interval {
+  padding: 12px; background: #edf7f0; border-radius: 8px;
+  margin: 10px 0; line-height: 1.6;
+}
+.interval button { margin-top: 8px; display: block; }
+footer { max-width: 1450px; margin: 0 auto; padding: 0 20px 24px; }
+@media (max-width: 850px) {
+  main { grid-template-columns: 1fr; padding: 10px; }
+  .chart { height: 320px; }
+  header { padding: 16px; }
+}
+@media (max-width: 420px) {
+  .panel { padding: 12px; }
+  .metrics { grid-template-columns: 1fr; }
+}
+</style>
 </head>
 <body>
+<header>
+  <h1>Баллистический вход в атмосферу</h1>
+  <p>Двумерный спуск без управления: гравитация, атмосферное
+     торможение и поиск допустимого коридора углов входа.</p>
+</header>
 
-    
-    
-    <!-- Ваш Python-код пишется здесь -->
-    <script type="py">
-        import math
-        import queue
-        import threading
-        import tkinter as tk
+<main>
+<section class="panel">
+  <h2>Параметры</h2>
+  <div class="fields">
+    <label>Масса, кг
+      <input id="mass" type="number" value="2000" step="100">
+    </label>
+    <label>Площадь, м²
+      <input id="area" type="number" value="10" step="0.5">
+    </label>
+    <label>Коэффициент Cd
+      <input id="cd" type="number" value="1.2" step="0.1">
+    </label>
+    <label>Высота входа, км
+      <input id="height" type="number" value="120" step="5">
+    </label>
+    <label>Скорость входа, м/с
+      <input id="speed" type="number" value="7800" step="100">
+    </label>
+    <label>Угол входа, °
+      <input id="gamma" type="number" value="-5" step="0.1">
+    </label>
+    <label>Предел перегрузки, g
+      <input id="limit" type="number" value="8" step="0.5">
+    </label>
+  </div>
 
-        from collections import Counter
-        from dataclasses import dataclass
-        from tkinter import ttk, messagebox
-        from tkinter.scrolledtext import ScrolledText
-        
-        import numpy as np
-        
-        from matplotlib.figure import Figure
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-        
-        
-        # ============================================================
-        # Планета и статическая атмосфера
-        # ============================================================
-        
-        R = 6_371_000.0             # м
-        MU = 3.986004418e14         # м^3/с^2
-        G0 = 9.80665                # м/с^2
-        
-        RHO0 = 1.225               # кг/м^3
-        H_SCALE = 7200.0            # м
-        ATM_TOP = 150_000.0         # м
-        
-        
-        @dataclass(frozen=True) # Неизменяемые начальные условия
-        class Parameters:
-            mass: float
-            area: float
-            cd: float
-        
-            entry_height: float
-            entry_speed: float
-            gamma_deg: float
-        
-            n_limit: float
-        
-            angle_min: float
-            angle_max: float
-            angle_step: float
-        
-            dt_max: float
-            t_max: float
-        
-            @property
-            def beta(self):
-                return self.mass / (self.cd * self.area)
-        
-        
-        @dataclass
-        class Result:
-            gamma: float
-            status: str
-        
-            time: np.ndarray
-            state: np.ndarray
-            speed: np.ndarray
-            load: np.ndarray
-            height: np.ndarray
-        
-            peak_load: float
-            peak_time: float
-            peak_height: float
-        
-        
-        STATUS_TEXT = {
-            "success": "Допустимый спуск",
-            "overload": "Превышена допустимая перегрузка",
-            "exit": "Повторное пересечение границы входа наружу",
-            "timeout": "Достижение поверхности не подтверждено за заданное время",
+  <details>
+    <summary>Атмосфера и настройки расчёта</summary>
+    <div class="fields">
+      <label>ρ₀, кг/м³
+        <input id="rho0" type="number" value="1.225" step="0.025">
+      </label>
+      <label>Шкала высоты H, км
+        <input id="scale" type="number" value="7.2" step="0.1">
+      </label>
+      <label>Макс. шаг, с
+        <input id="dt" type="number" value="0.5" step="0.05">
+      </label>
+      <label>Предельное время, с
+        <input id="tmax" type="number" value="4000" step="100">
+      </label>
+    </div>
+  </details>
+
+  <details open>
+    <summary>Поиск коридора</summary>
+    <div class="fields">
+      <label>От угла, °
+        <input id="amin" type="number" value="-15" step="0.1">
+      </label>
+      <label>До угла, °
+        <input id="amax" type="number" value="-0.2" step="0.1">
+      </label>
+      <label>Шаг сетки, °
+        <input id="astep" type="number" value="0.25" step="0.05">
+      </label>
+    </div>
+  </details>
+
+  <div class="actions">
+    <button id="run" class="primary">Моделировать спуск</button>
+    <button id="corridor">Рассчитать коридор</button>
+    <button id="cancel" class="danger" disabled>Остановить расчёт</button>
+  </div>
+  <div id="status" role="status" aria-live="polite">Готово к расчёту</div>
+  <progress id="progress" max="1" value="0"></progress>
+
+  <p class="note">
+    Угол отсчитывается от местной горизонтали; при входе он отрицателен.
+    Земля и атмосфера не вращаются. Подъёмная сила отсутствует.
+  </p>
+</section>
+
+<section class="panel">
+  <nav class="tabs" aria-label="Результаты">
+    <button class="active" data-tab="trajectory">Траектория</button>
+    <button data-tab="speedView">Скорость</button>
+    <button data-tab="loadView">Перегрузка</button>
+    <button data-tab="results">Итоги</button>
+    <button data-tab="corridorView">Коридор</button>
+  </nav>
+
+  <div id="trajectory" class="view active">
+    <canvas id="trajectoryCanvas" class="chart"
+      aria-label="Траектория аппарата"></canvas>
+    <p class="note">
+      Синяя линия — спуск, серая пунктирная — начальная орбита
+      без атмосферы, голубая — высота входа, зелёная — поверхность.
+      Масштабы осей различаются.
+    </p>
+  </div>
+  <div id="speedView" class="view">
+    <canvas id="speedCanvas" class="chart"
+      aria-label="Скорость от времени"></canvas>
+  </div>
+  <div id="loadView" class="view">
+    <canvas id="loadCanvas" class="chart"
+      aria-label="Перегрузка от времени"></canvas>
+    <p class="note">
+      Перегрузка n = D/(m g₀). Гравитация в неё не добавляется:
+      свободное падение само по себе не создаёт показаний акселерометра.
+    </p>
+  </div>
+  <div id="results" class="view">
+    <p id="verdict">Сначала запустите моделирование.</p>
+    <div id="metrics" class="metrics"></div>
+    <pre id="orbitInfo"></pre>
+    <p class="note">
+      Допустимый спуск — достижение поверхности за заданное время,
+      без выхода обратно через высоту входа и без превышения
+      перегрузки. Скорость удара, нагрев и безопасность посадки
+      не входят в критерий успеха.
+    </p>
+  </div>
+  <div id="corridorView" class="view">
+    <div id="corridorOutput">Сначала запустите поиск коридора.</div>
+  </div>
+
+  <div class="playback">
+    <button id="play" disabled>▶ Воспроизвести</button>
+    <button id="restart" disabled>С начала</button>
+    <label>Скорость анимации
+      <select id="rate">
+        <option value="10">10×</option>
+        <option value="50">50×</option>
+        <option value="100" selected>100×</option>
+        <option value="300">300×</option>
+      </select>
+    </label>
+  </div>
+  <input id="seek" type="range" min="0" max="1" value="0"
+    step="0.1" disabled aria-label="Время анимации">
+  <div id="frameInfo"></div>
+</section>
+</main>
+
+<footer class="note">
+  Учебная модель. Атмосфера: ρ(h) = ρ₀ exp(−h/H).
+  Для проверки сходимости уменьшайте шаг интегрирования
+  и шаг сетки углов. Точность уточнения границ коридора
+  не равна физической точности модели.
+</footer>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Вычислительный поток. Функция превращается в отдельный Worker.
+   ============================================================ */
+function workerMain() {
+  "use strict";
+
+  const R = 6371000;
+  const MU = 3.986004418e14;
+  const G0 = 9.80665;
+  const DEG = Math.PI / 180;
+
+  function rho(h, p) {
+    return p.rho0 * Math.exp(-Math.max(0, h) / p.scale);
+  }
+
+  function quantities(s, p) {
+    const radius = Math.hypot(s[0], s[1]);
+    const h = radius - R;
+    const v = Math.hypot(s[2], s[3]);
+    const drag = rho(h, p) * v * v / (2 * p.beta);
+    return { h, v, n: drag / G0, drag, radius };
+  }
+
+  function rhs(s, p) {
+    const r = Math.hypot(s[0], s[1]);
+    const v = Math.hypot(s[2], s[3]);
+    const g = -MU / (r * r * r);
+    const d = rho(r - R, p) * v / (2 * p.beta);
+    return [s[2], s[3], g*s[0] - d*s[2], g*s[1] - d*s[3]];
+  }
+
+  function add(s, k, a) {
+    return s.map((x, i) => x + a * k[i]);
+  }
+
+  function rk4(s, dt, p) {
+    const a = rhs(s, p);
+    const b = rhs(add(s, a, dt/2), p);
+    const c = rhs(add(s, b, dt/2), p);
+    const d = rhs(add(s, c, dt), p);
+    return s.map((x, i) =>
+      x + dt * (a[i] + 2*b[i] + 2*c[i] + d[i]) / 6);
+  }
+
+  // Локализация события повторным интегрированием части шага.
+  function eventState(s, dt, p, targetRadius, outward) {
+    let lo = 0, hi = dt;
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2;
+      const q = rk4(s, mid, p);
+      const inside = Math.hypot(q[0], q[1]) < targetRadius;
+      if (inside === outward) lo = mid;
+      else hi = mid;
+    }
+    const elapsed = (lo + hi) / 2;
+    return { state: rk4(s, elapsed, p), elapsed };
+  }
+
+  function simulate(p, gamma, history, earlyStop) {
+    const a = gamma * DEG;
+    const entryRadius = R + p.height;
+
+    let s = [
+      entryRadius, 0,
+      p.speed * Math.sin(a),
+      p.speed * Math.cos(a)
+    ];
+    let t = 0;
+    let q = quantities(s, p);
+    let peak = q.n, peakTime = 0, peakHeight = q.h;
+    let status = "timeout", event = null;
+    let steps = 0, nextRecord = 0;
+
+    const rows = [];
+    const record = () => {
+      const z = quantities(s, p);
+      rows.push([t, s[0], s[1], s[2], s[3], z.h, z.v, z.n]);
+    };
+    if (history) record();
+    nextRecord = 0.5;
+
+    if (earlyStop && peak > p.limit) event = "overload";
+
+    while (t < p.tmax && !event) {
+      if (++steps > 2000000) {
+        throw new Error("Слишком много шагов: измените параметры расчёта.");
+      }
+
+      q = quantities(s, p);
+      const vr = (s[0]*s[2] + s[1]*s[3]) / q.radius;
+
+      const dtDensity = 0.04*p.scale / Math.max(Math.abs(vr), 1);
+      const dtDrag = 0.04*Math.max(q.v, 1) / Math.max(q.drag, 1e-12);
+
+      let dt = Math.min(p.dt, dtDensity, dtDrag, p.tmax - t);
+      let ns = rk4(s, dt, p);
+      const nr = Math.hypot(ns[0], ns[1]);
+
+      if (nr <= R) {
+        const e = eventState(s, dt, p, R, false);
+        ns = e.state;
+        dt = e.elapsed;
+        event = "ground";
+      } else if (q.radius < entryRadius && nr >= entryRadius) {
+        const e = eventState(s, dt, p, entryRadius, true);
+        ns = e.state;
+        dt = e.elapsed;
+        event = "exit";
+      }
+
+      t += dt;
+      s = ns;
+
+      if (!s.every(Number.isFinite)) {
+        throw new Error("Численная ошибка. Уменьшите шаг интегрирования.");
+      }
+
+      q = quantities(s, p);
+      if (q.n > peak) {
+        peak = q.n;
+        peakTime = t;
+        peakHeight = q.h;
+      }
+
+      if (earlyStop && peak > p.limit && !event) event = "overload";
+
+      if (history && (t >= nextRecord || event)) {
+        record();
+        nextRecord = t + 0.5;
+      }
+    }
+
+    if (event === "ground") {
+      status = peak <= p.limit ? "success" : "overload";
+    } else if (event) {
+      status = event;
+    }
+
+    if (history && rows[rows.length-1][0] !== t) record();
+
+    return {
+      gamma, status, peak, peakTime, peakHeight, t,
+      final: s, finalHeight: q.h, finalSpeed: q.v, rows
+    };
+  }
+
+  function corridor(p) {
+    const cache = new Map();
+    const evaluate = angle => {
+      const key = angle.toFixed(12);
+      if (!cache.has(key)) {
+        cache.set(key, simulate(p, angle, false, true));
+      }
+      return cache.get(key);
+    };
+
+    const count = Math.ceil((p.amax - p.amin) / p.astep);
+    const angles = [];
+    const valid = [];
+    const counts = {};
+
+    for (let i = 0; i <= count; i++) {
+      const angle = p.amin + (p.amax - p.amin)*i/count;
+      const result = evaluate(angle);
+      angles.push(angle);
+      valid.push(result.status === "success");
+      counts[result.status] = (counts[result.status] || 0) + 1;
+
+      postMessage({
+        type: "progress",
+        value: 0.9*(i+1)/(count+1),
+        text: `Сетка: ${i+1}/${count+1}; угол ${angle.toFixed(3)}°`
+      });
+    }
+
+    const tolerance = Math.min(0.01, p.astep/10);
+    function refine(a, b, aValid) {
+      while (b-a > tolerance) {
+        const m = (a+b)/2;
+        const ok = evaluate(m).status === "success";
+        if (ok === aValid) a = m;
+        else b = m;
+      }
+      return aValid ? a : b;
+    }
+
+    postMessage({
+      type: "progress", value: 0.92,
+      text: "Уточнение найденных границ..."
+    });
+
+    const intervals = [];
+    let i = 0;
+    while (i < angles.length) {
+      if (!valid[i]) { i++; continue; }
+
+      const start = i;
+      while (i+1 < angles.length && valid[i+1]) i++;
+      const end = i;
+      const clippedLeft = start === 0;
+      const clippedRight = end === angles.length-1;
+
+      const left = clippedLeft ? angles[start] :
+        refine(angles[start-1], angles[start], false);
+      const right = clippedRight ? angles[end] :
+        refine(angles[end], angles[end+1], true);
+
+      intervals.push({left, right, clippedLeft, clippedRight});
+      i++;
+    }
+
+    return {intervals, counts, evaluations: cache.size, tolerance};
+  }
+
+  onmessage = event => {
+    try {
+      const {kind, p} = event.data;
+      p.beta = p.mass / (p.cd * p.area);
+
+      const result = kind === "simulation"
+        ? simulate(p, p.gamma, true, false)
+        : corridor(p);
+
+      postMessage({type: "done", kind, p, result});
+    } catch (error) {
+      postMessage({type: "error", text: error.message});
+    }
+  };
+}
+
+/* ============================================================
+   Интерфейс
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+const R = 6371000;
+const MU = 3.986004418e14;
+const names = {
+  success: "Допустимый спуск",
+  overload: "Превышена допустимая перегрузка",
+  exit: "Повторный выход через высоту входа",
+  timeout: "Поверхность не достигнута за заданное время"
+};
+
+let worker = null;
+let result = null;
+let usedParameters = null;
+let orbit = null;
+let currentTime = 0;
+let playing = false;
+let previousFrame = null;
+let activeTab = "trajectory";
+
+const inputIds = [
+  "mass", "area", "cd", "height", "speed", "gamma", "limit",
+  "rho0", "scale", "dt", "tmax", "amin", "amax", "astep"
+];
+
+function readParameters() {
+  const p = {};
+  for (const id of inputIds) {
+    if ($(id).value.trim() === "") throw new Error("Заполните все поля.");
+    p[id] = Number($(id).value);
+    if (!Number.isFinite(p[id])) throw new Error("Все параметры должны быть числами.");
+  }
+
+  if (p.mass <= 0 || p.area <= 0 || p.cd <= 0 || p.limit <= 0)
+    throw new Error("Масса, площадь, Cd и предел перегрузки должны быть > 0.");
+  if (p.rho0 <= 0 || p.rho0 > 20 || p.scale < 1 || p.scale > 30)
+    throw new Error("Введите 0 < ρ₀ ≤ 20 кг/м³ и 1 ≤ H ≤ 30 км.");
+  if (p.height < 60 || p.height > 150)
+    throw new Error("Высота входа: от 60 до 150 км.");
+  if (p.speed < 100 || p.speed > 16000)
+    throw new Error("Скорость входа: от 100 до 16000 м/с.");
+  if (p.gamma < -89 || p.gamma >= 0)
+    throw new Error("Угол входа должен быть от −89° до 0°, не включая 0°.");
+  if (!(p.amin >= -89 && p.amin < p.amax && p.amax < 0))
+    throw new Error("Для поиска требуется −89 ≤ начальный угол < конечный угол < 0.");
+  if (p.astep <= 0 ||
+      Math.ceil((p.amax-p.amin)/p.astep) > 1500)
+    throw new Error("Шаг поиска должен быть > 0; максимум 1500 интервалов.");
+  if (p.dt < 0.01 || p.dt > 2)
+    throw new Error("Шаг интегрирования: от 0.01 до 2 с.");
+  if (p.tmax < 100 || p.tmax > 20000)
+    throw new Error("Предельное время: от 100 до 20000 с.");
+
+  p.height *= 1000;
+  p.scale *= 1000;
+  return p;
+}
+
+function setBusy(busy) {
+  $("run").disabled = busy;
+  $("corridor").disabled = busy;
+  $("cancel").disabled = !busy;
+}
+
+function stopPlayback() {
+  playing = false;
+  previousFrame = null;
+  $("play").textContent = "▶ Воспроизвести";
+}
+
+function terminateWorker() {
+  if (worker) worker.terminate();
+  worker = null;
+  setBusy(false);
+}
+
+function startJob(kind, override = null) {
+  let p;
+  try {
+    p = override ? {...override} : readParameters();
+  } catch (error) {
+    $("status").textContent = error.message;
+    return;
+  }
+
+  terminateWorker();
+  stopPlayback();
+  setBusy(true);
+  $("progress").value = 0;
+  $("status").textContent = "Выполняется расчёт...";
+
+  try {
+    const blob = new Blob(
+      [`(${workerMain.toString()})();`],
+      {type: "text/javascript"}
+    );
+    const url = URL.createObjectURL(blob);
+    try {
+      worker = new Worker(url);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+
+    worker.onmessage = event => {
+      const message = event.data;
+
+      if (message.type === "progress") {
+        $("progress").value = message.value;
+        $("status").textContent = message.text;
+      } else if (message.type === "error") {
+        terminateWorker();
+        $("status").textContent = "Ошибка: " + message.text;
+      } else if (message.type === "done") {
+        terminateWorker();
+        $("progress").value = 1;
+
+        if (message.kind === "simulation") {
+          result = message.result;
+          usedParameters = message.p;
+          orbit = getOrbit(usedParameters);
+          currentTime = 0;
+
+          $("seek").max = result.t;
+          $("seek").value = 0;
+          $("seek").disabled = false;
+          $("play").disabled = false;
+          $("restart").disabled = false;
+
+          showResults();
+          selectTab("trajectory");
+          $("status").textContent = names[result.status];
+          playing = true;
+          $("play").textContent = "⏸ Пауза";
+        } else {
+          showCorridor(message.p, message.result);
+          $("status").textContent = "Расчёт коридора завершён";
+          selectTab("corridorView");
         }
-        
-        
-        def density(height):
-            """Статическая экспоненциальная атмосфера."""
-            if height > ATM_TOP:
-                return 0.0
-            return RHO0 * math.exp(-max(0.0, height) / H_SCALE)
-        
-        
-        def observables(state, p):
-            x, y, vx, vy = state
-            height = math.hypot(x, y) - R
-            speed = math.hypot(vx, vy)
-        
-            drag_acc = density(height) * speed * speed / (2.0 * p.beta)
-            load = drag_acc / G0
-        
-            return height, speed, load
-        
-        
-        def rhs(state, p):
-            x, y, vx, vy = state
-        
-            radius = math.hypot(x, y)
-            speed = math.hypot(vx, vy)
-        
-            gravity_factor = -MU / radius**3
-            drag_factor = density(radius - R) * speed / (2.0 * p.beta)
-        
-            return (
-                vx,
-                vy,
-                gravity_factor * x - drag_factor * vx,
-                gravity_factor * y - drag_factor * vy,
-            )
-        
-        
-        def shifted(state, derivative, scale):
-            return tuple(
-                state[i] + scale * derivative[i]
-                for i in range(4)
-            )
-        
-        
-        def rk4_step(state, dt, p):
-            k1 = rhs(state, p)
-            k2 = rhs(shifted(state, k1, dt / 2.0), p)
-            k3 = rhs(shifted(state, k2, dt / 2.0), p)
-            k4 = rhs(shifted(state, k3, dt), p)
-        
-            return tuple(
-                state[i] + dt * (
-                    k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]
-                ) / 6.0
-                for i in range(4)
-            )
-        
-        
-        def crossing_fraction(start, end, radius, outward):
-            """
-            Локализация пересечения окружности на отрезке между
-            соседними состояниями. Для точности уменьшайте dt_max.
-            """
-            left, right = 0.0, 1.0
-        
-            for _ in range(35):
-                middle = (left + right) / 2.0
-        
-                x = start[0] + middle * (end[0] - start[0])
-                y = start[1] + middle * (end[1] - start[1])
-                inside = math.hypot(x, y) < radius
-        
-                # Наружу: сначала внутри, затем снаружи.
-                # К поверхности: сначала снаружи, затем внутри.
-                if inside == outward:
-                    left = middle
-                else:
-                    right = middle
-        
-            return (left + right) / 2.0
-        
-        
-        def simulate(p, gamma=None, keep_history=True, stop_on_overload=False):
-            """
-            RK4 с ограничением шага по характерным временам движения.
-        
-            Для исследования коридора историю можно не сохранять,
-            а расчет останавливать сразу после превышения перегрузки.
-            """
-            if gamma is None:
-                gamma = p.gamma_deg
-        
-            angle = math.radians(gamma)
-            entry_radius = R + p.entry_height
-        
-            state = (
-                entry_radius,
-                0.0,
-                p.entry_speed * math.sin(angle),
-                p.entry_speed * math.cos(angle),
-            )
-        
-            time = 0.0
-            times = [time]
-            states = [state]
-        
-            height, speed, load = observables(state, p)
-        
-            peak_load = load
-            peak_time = 0.0
-            peak_height = height
-        
-            next_record = 1.0
-            event = None
-        
-            if stop_on_overload and load > p.n_limit:
-                event = "overload"
-        
-            while time < p.t_max and event is None:
-                height, speed, load = observables(state, p)
-        
-                radius = math.hypot(state[0], state[1])
-                radial_speed = (
-                    state[0] * state[2] + state[1] * state[3]
-                ) / radius
-        
-                drag_acc = load * G0
-        
-                # Ограничение изменения плотности и скорости за шаг.
-                dt_density = 0.05 * H_SCALE / max(abs(radial_speed), 1.0)
-                dt_drag = 0.05 * max(speed, 1.0) / max(drag_acc, 1e-12)
-        
-                dt = min(
-                    p.dt_max,
-                    dt_density,
-                    dt_drag,
-                    p.t_max - time,
-                )
-        
-                new_state = rk4_step(state, dt, p)
-                new_radius = math.hypot(new_state[0], new_state[1])
-        
-                if new_radius <= R:
-                    fraction = crossing_fraction(
-                        state, new_state, R, outward=False
-                    )
-                    new_state = tuple(
-                        state[i] + fraction * (new_state[i] - state[i])
-                        for i in range(4)
-                    )
-                    dt *= fraction
-                    event = "ground"
-        
-                elif radius < entry_radius and new_radius >= entry_radius:
-                    fraction = crossing_fraction(
-                        state, new_state, entry_radius, outward=True
-                    )
-                    new_state = tuple(
-                        state[i] + fraction * (new_state[i] - state[i])
-                        for i in range(4)
-                    )
-                    dt *= fraction
-                    event = "exit"
-        
-                time += dt
-                state = new_state
-        
-                height, speed, load = observables(state, p)
-        
-                if load > peak_load:
-                    peak_load = load
-                    peak_time = time
-                    peak_height = height
-        
-                if (
-                    stop_on_overload
-                    and peak_load > p.n_limit
-                    and event is None
-                ):
-                    event = "overload"
-        
-                # История нужна только для отображения.
-                # Максимум перегрузки проверяется на каждом шаге.
-                if keep_history and (time >= next_record or event is not None):
-                    times.append(time)
-                    states.append(state)
-                    next_record = time + 1.0
-        
-            if times[-1] != time:
-                times.append(time)
-                states.append(state)
-        
-            if event == "ground":
-                status = (
-                    "success" if peak_load <= p.n_limit
-                    else "overload"
-                )
-            elif event is not None:
-                status = event
-            else:
-                status = "timeout"
-        
-            times_array = np.asarray(times, dtype=float)
-            states_array = np.asarray(states, dtype=float)
-        
-            heights = np.hypot(states_array[:, 0], states_array[:, 1]) - R
-            speeds = np.hypot(states_array[:, 2], states_array[:, 3])
-        
-            loads = np.asarray([
-                observables(s, p)[2]
-                for s in states_array
-            ])
-        
-            return Result(
-                gamma=gamma,
-                status=status,
-                time=times_array,
-                state=states_array,
-                speed=speeds,
-                load=loads,
-                height=heights,
-                peak_load=peak_load,
-                peak_time=peak_time,
-                peak_height=peak_height,
-            )
-        
-        
-        # ============================================================
-        # Орбита, соответствующая состоянию в точке входа
-        # ============================================================
-        
-        def initial_orbit(p):
-            gamma = math.radians(p.gamma_deg)
-            radius = R + p.entry_height
-        
-            vx = p.entry_speed * math.sin(gamma)
-            vy = p.entry_speed * math.cos(gamma)
-        
-            angular_momentum = radius * vy
-            energy = p.entry_speed**2 / 2.0 - MU / radius
-        
-            # Вектор эксцентриситета.
-            ex = vy * angular_momentum / MU - 1.0
-            ey = -vx * angular_momentum / MU
-        
-            eccentricity = math.hypot(ex, ey)
-            omega = math.atan2(ey, ex)
-        
-            semilatus_rectum = angular_momentum**2 / MU
-        
-            anomaly = np.linspace(-math.pi, math.pi, 1600)
-            denominator = 1.0 + eccentricity * np.cos(anomaly)
-        
-            orbit_radius = np.full_like(anomaly, np.nan)
-        
-            mask = denominator > 1e-8
-            orbit_radius[mask] = semilatus_rectum / denominator[mask]
-        
-            # Не показываем часть математической орбиты внутри планеты
-            # и слишком удаленные участки.
-            visible = (
-                (orbit_radius >= R)
-                & (orbit_radius <= 3.0 * R)
-            )
-            orbit_radius[~visible] = np.nan
-        
-            theta = anomaly + omega
-        
-            ox = orbit_radius * np.cos(theta) / 1000.0
-            oy = orbit_radius * np.sin(theta) / 1000.0
-        
-            pericenter_height = semilatus_rectum / (1.0 + eccentricity) - R
-        
-            if energy < 0.0:
-                semimajor_axis = -MU / (2.0 * energy)
-                apocenter_height = semimajor_axis * (1.0 + eccentricity) - R
-        
-                description = (
-                    f"Начальная орбита: эллиптическая, e={eccentricity:.4f}\n"
-                    f"Перицентр: {pericenter_height / 1000:.1f} км; "
-                    f"апоцентр: {apocenter_height / 1000:.1f} км.\n"
-                )
-            else:
-                description = (
-                    f"Начальная траектория: незамкнутая, e={eccentricity:.4f}\n"
-                    f"Перицентр: {pericenter_height / 1000:.1f} км.\n"
-                )
-        
-            if pericenter_height < 0:
-                description += (
-                    "Отрицательная высота перицентра означает, что "
-                    "вакуумная орбита пересекает планету.\n"
-                )
-        
-            return ox, oy, description
-        
-        
-        # ============================================================
-        # Поиск допустимого коридора
-        # ============================================================
-        
-        def find_corridor(p, progress):
-            """
-            Сначала сканируем заданную сетку углов.
-            Затем уточняем обнаруженные переходы допустим/недопустим.
-        
-            Не предполагаем заранее, что допустимый интервал единственный.
-            """
-            cache = {}
-        
-            def evaluate(angle):
-                key = round(float(angle), 12)
-        
-                if key not in cache:
-                    cache[key] = simulate(
-                        p,
-                        gamma=float(angle),
-                        keep_history=False,
-                        stop_on_overload=True,
-                    )
-        
-                return cache[key]
-        
-            count = math.ceil(
-                (p.angle_max - p.angle_min) / p.angle_step
-            )
-            angles = np.linspace(p.angle_min, p.angle_max, count + 1)
-        
-            accepted = []
-            scan_statuses = []
-        
-            for index, angle in enumerate(angles):
-                result = evaluate(angle)
-                accepted.append(result.status == "success")
-                scan_statuses.append(result.status)
-        
-                progress(
-                    f"Коридор: {index + 1}/{len(angles)}, "
-                    f"γ = {angle:.3f}°"
-                )
-        
-            tolerance = min(0.01, p.angle_step / 10.0)
-        
-            def refine(a, b, a_is_valid):
-                while b - a > tolerance:
-                    middle = (a + b) / 2.0
-                    middle_is_valid = evaluate(middle).status == "success"
-        
-                    if middle_is_valid == a_is_valid:
-                        a = middle
-                    else:
-                        b = middle
-        
-                # Возвращаем точку с допустимой стороны перехода.
-                return a if a_is_valid else b
-        
-            intervals = []
-            index = 0
-        
-            while index < len(angles):
-                if not accepted[index]:
-                    index += 1
-                    continue
-        
-                start = index
-        
-                while index + 1 < len(angles) and accepted[index + 1]:
-                    index += 1
-        
-                end = index
-        
-                left_clipped = start == 0
-                right_clipped = end == len(angles) - 1
-        
-                left = float(angles[start])
-                right = float(angles[end])
-        
-                if not left_clipped:
-                    left = refine(
-                        float(angles[start - 1]),
-                        float(angles[start]),
-                        False,
-                    )
-        
-                if not right_clipped:
-                    right = refine(
-                        float(angles[end]),
-                        float(angles[end + 1]),
-                        True,
-                    )
-        
-                intervals.append((
-                    left, right, left_clipped, right_clipped
-                ))
-                index += 1
-        
-            return (
-                intervals,
-                Counter(scan_statuses),
-                len(cache),
-                tolerance,
-            )
-        
-        
-        # ============================================================
-        # Графический интерфейс
-        # ============================================================
-        
-        class EntrySimulator(tk.Tk):
-            def __init__(self):
-                super().__init__()
-        
-                self.title("Баллистический вход в атмосферу")
-                self.geometry("1380x900")
-                self.minsize(1100, 740)
-        
-                self.messages = queue.Queue()
-                self.animation_id = None
-                self.variables = {}
-        
-                self.build_interface()
-                self.after(100, self.poll_messages)
-        
-            def build_interface(self):
-                controls = ttk.Frame(self, padding=10)
-                controls.pack(side=tk.LEFT, fill=tk.Y)
-        
-                charts = ttk.Frame(self, padding=5)
-                charts.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        
-                fields = [
-                    ("mass", "Масса, кг", "2000"),
-                    ("area", "Площадь, м²", "10"),
-                    ("cd", "Коэффициент Cd", "1.2"),
-                    ("entry_height", "Высота входа, км", "120"),
-                    ("entry_speed", "Скорость входа, м/с", "7800"),
-                    ("gamma_deg", "Угол входа, град", "-5"),
-                    ("n_limit", "Предельная перегрузка, g", "8"),
-                    ("angle_min", "Нижний угол поиска, град", "-15"),
-                    ("angle_max", "Верхний угол поиска, град", "-0.2"),
-                    ("angle_step", "Шаг поиска, град", "0.25"),
-                    ("dt_max", "Макс. шаг интегрирования, с", "0.5"),
-                    ("t_max", "Предельное время, с", "4000"),
-                ]
-        
-                ttk.Label(
-                    controls,
-                    text="Параметры спуска",
-                    font=("", 12, "bold"),
-                ).grid(row=0, column=0, columnspan=2, pady=(0, 10))
-        
-                for row, (key, label, default) in enumerate(fields, start=1):
-                    ttk.Label(controls, text=label).grid(
-                        row=row, column=0, sticky="w", pady=3
-                    )
-        
-                    variable = tk.StringVar(value=default)
-                    self.variables[key] = variable
-        
-                    ttk.Entry(
-                        controls, textvariable=variable, width=12
-                    ).grid(row=row, column=1, padx=(8, 0), pady=3)
-        
-                row = len(fields) + 1
-        
-                self.run_button = ttk.Button(
-                    controls,
-                    text="Моделировать спуск",
-                    command=lambda: self.start_job("simulation"),
-                )
-                self.run_button.grid(
-                    row=row, column=0, columnspan=2, sticky="ew", pady=(12, 5)
-                )
-        
-                self.corridor_button = ttk.Button(
-                    controls,
-                    text="Рассчитать коридор",
-                    command=lambda: self.start_job("corridor"),
-                )
-                self.corridor_button.grid(
-                    row=row + 1, column=0, columnspan=2, sticky="ew", pady=5
-                )
-        
-                ttk.Label(
-                    controls, text="Скорость анимации, модельных с/кадр"
-                ).grid(
-                    row=row + 2, column=0, columnspan=2, sticky="w", pady=(10, 0)
-                )
-        
-                self.animation_speed = tk.DoubleVar(value=10.0)
-        
-                ttk.Scale(
-                    controls,
-                    from_=1.0,
-                    to=100.0,
-                    variable=self.animation_speed,
-                ).grid(
-                    row=row + 3, column=0, columnspan=2, sticky="ew"
-                )
-        
-                self.status_var = tk.StringVar(value="Готово")
-        
-                ttk.Label(
-                    controls,
-                    textvariable=self.status_var,
-                    wraplength=310,
-                ).grid(
-                    row=row + 4, column=0, columnspan=2,
-                    sticky="w", pady=10,
-                )
-        
-                self.report = ScrolledText(
-                    controls,
-                    width=43,
-                    height=20,
-                    wrap=tk.WORD,
-                    font=("", 10),
-                )
-                self.report.grid(
-                    row=row + 5, column=0, columnspan=2, sticky="nsew"
-                )
-        
-                controls.rowconfigure(row + 5, weight=1)
-        
-                self.figure = Figure(figsize=(9, 8), dpi=100)
-                grid = self.figure.add_gridspec(2, 2)
-        
-                self.ax_trajectory = self.figure.add_subplot(grid[0, :])
-                self.ax_speed = self.figure.add_subplot(grid[1, 0])
-                self.ax_load = self.figure.add_subplot(grid[1, 1])
-        
-                self.figure.subplots_adjust(
-                    left=0.09, right=0.97,
-                    bottom=0.09, top=0.95,
-                    hspace=0.37, wspace=0.30,
-                )
-        
-                self.canvas = FigureCanvasTkAgg(self.figure, master=charts)
-                self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        
-                self.ax_trajectory.set_title("Траектория спуска")
-                self.ax_speed.set_title("Скорость")
-                self.ax_load.set_title("Аэродинамическая перегрузка")
-                self.canvas.draw()
-        
-                self.write_report(
-                    "Планета: Земля.\n"
-                    "Атмосфера: неподвижная, экспоненциальная.\n\n"
-                    "Угол входа отрицателен и отсчитывается от "
-                    "местной горизонтали.\n\n"
-                    "Допустимый спуск: достижение поверхности за "
-                    "заданное время без превышения перегрузки и "
-                    "без выхода наружу через высоту входа.\n\n"
-                    "Безопасность посадки и тепловая защита "
-                    "в данной модели не оцениваются."
-                )
-        
-            def write_report(self, text):
-                self.report.delete("1.0", tk.END)
-                self.report.insert(tk.END, text)
-        
-            def read_parameters(self):
-                values = {
-                    key: float(var.get().replace(",", "."))
-                    for key, var in self.variables.items()
-                }
-        
-                if not all(math.isfinite(value) for value in values.values()):
-                    raise ValueError("Все значения должны быть конечными числами.")
-        
-                values["entry_height"] *= 1000.0
-                p = Parameters(**values)
-        
-                if min(p.mass, p.area, p.cd, p.n_limit) <= 0:
-                    raise ValueError(
-                        "Масса, площадь, Cd и предельная перегрузка должны быть > 0."
-                    )
-        
-                if not 60_000 <= p.entry_height <= ATM_TOP:
-                    raise ValueError("Высота входа должна быть от 60 до 150 км.")
-        
-                if not 100 <= p.entry_speed <= 16_000:
-                    raise ValueError("Скорость должна быть от 100 до 16000 м/с.")
-        
-                if not -89.0 <= p.gamma_deg < 0.0:
-                    raise ValueError("Угол входа должен быть в диапазоне [-89; 0).")
-        
-                if not -89.0 <= p.angle_min < p.angle_max < 0.0:
-                    raise ValueError(
-                        "Для поиска требуется: -89 ≤ нижний угол < верхний угол < 0."
-                    )
-        
-                if p.angle_step <= 0:
-                    raise ValueError("Шаг поиска должен быть положительным.")
-        
-                if math.ceil(
-                    (p.angle_max - p.angle_min) / p.angle_step
-                ) > 2000:
-                    raise ValueError("Слишком густая сетка: максимум 2000 интервалов.")
-        
-                if not 0.01 <= p.dt_max <= 2.0:
-                    raise ValueError("Шаг интегрирования должен быть от 0.01 до 2 с.")
-        
-                if not 100 <= p.t_max <= 20_000:
-                    raise ValueError("Предельное время должно быть от 100 до 20000 с.")
-        
-                return p
-        
-            def stop_animation(self):
-                if self.animation_id is not None:
-                    self.after_cancel(self.animation_id)
-                    self.animation_id = None
-        
-            def set_busy(self, busy):
-                state = "disabled" if busy else "normal"
-                self.run_button.configure(state=state)
-                self.corridor_button.configure(state=state)
-        
-            def start_job(self, kind):
-                try:
-                    parameters = self.read_parameters()
-                except (ValueError, OverflowError) as error:
-                    messagebox.showerror("Ошибка параметров", str(error))
-                    return
-        
-                self.stop_animation()
-                self.set_busy(True)
-                self.status_var.set("Выполняется расчет...")
-        
-                def worker():
-                    try:
-                        if kind == "simulation":
-                            result = simulate(parameters)
-                        else:
-                            result = find_corridor(
-                                parameters,
-                                lambda text: self.messages.put(("progress", text)),
-                            )
-        
-                        self.messages.put(("done", kind, parameters, result))
-        
-                    except Exception as error:
-                        self.messages.put(("error", str(error)))
-        
-                threading.Thread(target=worker, daemon=True).start()
-        
-            def poll_messages(self):
-                try:
-                    while True:
-                        message = self.messages.get_nowait()
-        
-                        if message[0] == "progress":
-                            self.status_var.set(message[1])
-        
-                        elif message[0] == "error":
-                            self.set_busy(False)
-                            self.status_var.set("Ошибка расчета")
-                            messagebox.showerror("Ошибка", message[1])
-        
-                        elif message[0] == "done":
-                            _, kind, parameters, result = message
-                            self.set_busy(False)
-        
-                            if kind == "simulation":
-                                self.show_simulation(parameters, result)
-                            else:
-                                self.show_corridor(parameters, result)
-        
-                except queue.Empty:
-                    pass
-        
-                self.after(100, self.poll_messages)
-        
-            def show_simulation(self, p, result):
-                ax = self.ax_trajectory
-                av = self.ax_speed
-                an = self.ax_load
-        
-                for axis in (ax, av, an):
-                    axis.clear()
-        
-                states = result.state
-        
-                # Координаты графика повернуты для удобства:
-                # горизонтальная ось — y, вертикальная — x-R.
-                horizontal = states[:, 1] / 1000.0
-                vertical = states[:, 0] / 1000.0 - R / 1000.0
-        
-                theta = np.linspace(-math.pi, math.pi, 2400)
-        
-                planet_horizontal = R * np.sin(theta) / 1000.0
-                planet_vertical = R * np.cos(theta) / 1000.0 - R / 1000.0
-        
-                ax.fill(
-                    planet_horizontal, planet_vertical,
-                    color="#dce6d5", label="Планета",
-                )
-                ax.plot(planet_horizontal, planet_vertical, color="gray", lw=1)
-        
-                boundary_radius = R + p.entry_height
-        
-                ax.plot(
-                    boundary_radius * np.sin(theta) / 1000.0,
-                    boundary_radius * np.cos(theta) / 1000.0 - R / 1000.0,
-                    "--", color="skyblue", lw=1,
-                    label="Граница входа",
-                )
-        
-                orbit_x, orbit_y, orbit_description = initial_orbit(p)
-        
-                ax.plot(
-                    orbit_y,
-                    orbit_x - R / 1000.0,
-                    "--", color="gray", lw=1.2,
-                    label="Начальная орбита без атмосферы",
-                )
-        
-                ax.plot(
-                    horizontal[0], vertical[0],
-                    "go", label="Точка входа",
-                )
-        
-                trajectory_line, = ax.plot(
-                    [], [], color="tab:blue", lw=2, label="Спуск"
-                )
-                vehicle_point, = ax.plot([], [], "ro", markersize=6)
-        
-                ax.set_title("Траектория в плоскости движения")
-                ax.set_xlabel("y, км")
-                ax.set_ylabel("x − R, км")
-                ax.grid(alpha=0.3)
-                ax.legend(fontsize=8, loc="best")
-        
-                span_x = max(float(np.ptp(horizontal)), 100.0)
-                span_y = max(float(np.ptp(vertical)), 100.0)
-        
-                ax.set_xlim(
-                    float(horizontal.min()) - 0.08 * span_x,
-                    float(horizontal.max()) + 0.08 * span_x,
-                )
-                ax.set_ylim(
-                    float(vertical.min()) - 0.12 * span_y,
-                    float(vertical.max()) + 0.12 * span_y,
-                )
-        
-                # Масштабы по осям различаются: это удобно для
-                # наблюдения высоты над криволинейной поверхностью.
-                av.set_title("Скорость")
-                av.set_xlabel("Время, с")
-                av.set_ylabel("Скорость, км/с")
-                av.grid(alpha=0.3)
-        
-                an.set_title("Аэродинамическая перегрузка")
-                an.set_xlabel("Время, с")
-                an.set_ylabel("Перегрузка, g")
-                an.grid(alpha=0.3)
-                an.axhline(
-                    p.n_limit, color="red", ls="--",
-                    label=f"Предел: {p.n_limit:g} g",
-                )
-                an.legend(fontsize=8)
-        
-                speed_line, = av.plot([], [], color="tab:blue")
-                load_line, = an.plot([], [], color="tab:orange")
-        
-                final_time = float(result.time[-1])
-        
-                av.set_xlim(0, max(final_time, 1.0))
-                an.set_xlim(0, max(final_time, 1.0))
-        
-                av.set_ylim(0, max(float(result.speed.max()) / 1000 * 1.1, 0.1))
-                an.set_ylim(0, max(result.peak_load, p.n_limit) * 1.15)
-        
-                angles = np.unwrap(np.arctan2(states[:, 1], states[:, 0]))
-                ground_range = abs(angles[-1] - angles[0]) * R / 1000.0
-        
-                final_label = (
-                    "Скорость у поверхности"
-                    if abs(result.height[-1]) < 1.0
-                    else "Скорость в конце расчета"
-                )
-        
-                text = (
-                    f"{STATUS_TEXT[result.status]}\n\n"
-                    f"Угол входа: {p.gamma_deg:.3f}°\n"
-                    f"Скорость входа: {p.entry_speed:.1f} м/с\n"
-                    f"Высота входа: {p.entry_height / 1000:.1f} км\n"
-                    f"Баллистический коэффициент: {p.beta:.2f} кг/м²\n\n"
-                    f"Время: {final_time:.1f} с\n"
-                    f"Конечная высота: {max(0, result.height[-1]) / 1000:.3f} км\n"
-                    f"{final_label}: {result.speed[-1]:.1f} м/с\n"
-                    f"Дальность по поверхности: {ground_range:.1f} км\n\n"
-                    f"Максимальная перегрузка: {result.peak_load:.3f} g\n"
-                    f"Время максимума: {result.peak_time:.1f} с\n"
-                    f"Высота максимума: {max(0, result.peak_height) / 1000:.2f} км\n"
-                    f"Допустимая перегрузка: {p.n_limit:.2f} g\n\n"
-                    + orbit_description
-                    + "\nКритерий: поверхность достигнута за отведенное "
-                      "время, перегрузка не превышена, выхода через "
-                      "границу входа наружу нет.\n\n"
-                      "Нагрев и безопасность посадки не оцениваются.\n"
-                      "Масштабы осей траектории различаются."
-                )
-        
-                if result.status in ("exit", "timeout"):
-                    text += (
-                        "\nОграничение перегрузки: "
-                        + (
-                            "соблюдено на рассчитанном участке."
-                            if result.peak_load <= p.n_limit
-                            else "также нарушено."
-                        )
-                    )
-        
-                self.write_report(text)
-        
-                playback_time = 0.0
-        
-                def animate():
-                    nonlocal playback_time
-        
-                    index = int(np.searchsorted(
-                        result.time, playback_time, side="right"
-                    ))
-                    index = max(1, min(index, len(result.time)))
-        
-                    trajectory_line.set_data(
-                        horizontal[:index], vertical[:index]
-                    )
-                    vehicle_point.set_data(
-                        [horizontal[index - 1]], [vertical[index - 1]]
-                    )
-        
-                    speed_line.set_data(
-                        result.time[:index], result.speed[:index] / 1000.0
-                    )
-                    load_line.set_data(
-                        result.time[:index], result.load[:index]
-                    )
-        
-                    self.status_var.set(
-                        f"Анимация: t = {result.time[index - 1]:.1f} с; "
-                        f"h = {max(0, result.height[index - 1]) / 1000:.1f} км"
-                    )
-        
-                    self.canvas.draw_idle()
-        
-                    if index < len(result.time):
-                        playback_time += self.animation_speed.get()
-                        self.animation_id = self.after(35, animate)
-                    else:
-                        self.animation_id = None
-                        self.status_var.set(STATUS_TEXT[result.status])
-        
-                animate()
-        
-            def show_corridor(self, p, data):
-                intervals, counts, evaluations, tolerance = data
-        
-                text = (
-                    "РАСЧЕТ ДОПУСТИМОГО КОРИДОРА\n\n"
-                    f"Высота входа: {p.entry_height / 1000:.1f} км\n"
-                    f"Скорость входа: {p.entry_speed:.1f} м/с\n"
-                    f"Масса: {p.mass:g} кг; площадь: {p.area:g} м²\n"
-                    f"Cd: {p.cd:g}; β: {p.beta:.2f} кг/м²\n"
-                    f"Предел перегрузки: {p.n_limit:g} g\n"
-                    f"Предельное время: {p.t_max:g} с\n\n"
-                    f"Область поиска: [{p.angle_min:g}; {p.angle_max:g}]°\n"
-                    f"Шаг сетки не более: {p.angle_step:g}°\n"
-                    f"Уточнение переходов до: {tolerance:.4f}°\n\n"
-                )
-        
-                if intervals:
-                    text += "Обнаруженные допустимые интервалы:\n"
-        
-                    for number, (left, right, clip_left, clip_right) in enumerate(
-                        intervals, start=1
-                    ):
-                        text += (
-                            f"{number}. [{left:.4f}; {right:.4f}]°\n"
-                            f"   Ширина: {right - left:.4f}°\n"
-                        )
-        
-                        if clip_left or clip_right:
-                            text += (
-                                "   Интервал касается границы области поиска; "
-                                "полная граница коридора с этой стороны "
-                                "не определена.\n"
-                            )
-                else:
-                    text += (
-                        "Допустимые углы на заданной сетке не обнаружены.\n"
-                    )
-        
-                text += "\nРезультаты первичного сканирования:\n"
-        
-                for status, count in counts.items():
-                    text += f"• {STATUS_TEXT[status]}: {count}\n"
-        
-                text += (
-                    f"\nВсего расчетов с уточнениями: {evaluations}\n\n"
-                    "Коридор относится к однопроходному спуску. "
-                    "Повторные входы после выхода через границу "
-                    "входа не рассчитываются.\n\n"
-                    "Сетка может пропустить узкий допустимый или "
-                    "недопустимый участок. Проверьте результат "
-                    "при меньшем шаге поиска.\n\n"
-                    "Точность уточнения по углу не равна физической "
-                    "точности модели. Для проверки численной "
-                    "сходимости уменьшите шаг интегрирования вдвое.\n\n"
-                    "Для анимации выберите угол из интервала и "
-                    "нажмите «Моделировать спуск»."
-                )
-        
-                self.write_report(text)
-                self.status_var.set("Расчет коридора завершен")
-        
-        
-        if __name__ == "__main__":
-            app = EntrySimulator()
-            app.mainloop()
+      }
+    };
 
-    </script>
+    worker.onerror = event => {
+      terminateWorker();
+      $("status").textContent = "Ошибка вычислительного потока: " + event.message;
+    };
 
+    worker.postMessage({kind, p});
+  } catch (error) {
+    terminateWorker();
+    $("status").textContent = "Не удалось запустить расчёт: " + error.message;
+  }
+}
+
+$("run").onclick = () => startJob("simulation");
+$("corridor").onclick = () => startJob("corridor");
+$("cancel").onclick = () => {
+  terminateWorker();
+  $("status").textContent = "Расчёт остановлен; прежние результаты сохранены.";
+};
+
+function selectTab(id) {
+  activeTab = id;
+  document.querySelectorAll(".view").forEach(el =>
+    el.classList.toggle("active", el.id === id));
+  document.querySelectorAll("[data-tab]").forEach(el =>
+    el.classList.toggle("active", el.dataset.tab === id));
+  draw();
+}
+
+document.querySelectorAll("[data-tab]").forEach(button => {
+  button.onclick = () => selectTab(button.dataset.tab);
+});
+
+$("play").onclick = () => {
+  if (!result) return;
+  if (playing) {
+    stopPlayback();
+  } else {
+    if (currentTime >= result.t) currentTime = 0;
+    playing = true;
+    previousFrame = null;
+    $("play").textContent = "⏸ Пауза";
+  }
+};
+
+$("restart").onclick = () => {
+  currentTime = 0;
+  stopPlayback();
+  draw();
+};
+
+$("seek").oninput = () => {
+  stopPlayback();
+  currentTime = Number($("seek").value);
+  draw();
+};
+
+function snapshot(p) {
+  return `h₀=${(p.height/1000).toFixed(1)} км; ` +
+    `v₀=${p.speed.toFixed(0)} м/с; m=${p.mass} кг; S=${p.area} м²; ` +
+    `Cd=${p.cd}; nдоп=${p.limit} g.\n` +
+    `ρ₀=${p.rho0} кг/м³; H=${(p.scale/1000).toFixed(2)} км; ` +
+    `Δt≤${p.dt} с; T≤${p.tmax} с.`;
+}
+
+function getOrbit(p) {
+  const gamma = p.gamma*Math.PI/180;
+  const r = R+p.height;
+  const vx = p.speed*Math.sin(gamma);
+  const vy = p.speed*Math.cos(gamma);
+  const angularMomentum = r*vy;
+  const energy = p.speed*p.speed/2 - MU/r;
+  const ex = vy*angularMomentum/MU - 1;
+  const ey = -vx*angularMomentum/MU;
+  const e = Math.hypot(ex, ey);
+  const omega = Math.atan2(ey, ex);
+  const semilatus = angularMomentum*angularMomentum/MU;
+  const pericenter = semilatus/(1+e)-R;
+  let apocenter = null;
+
+  if (energy < 0) {
+    const a = -MU/(2*energy);
+    apocenter = a*(1+e)-R;
+  }
+
+  const points = [];
+  for (let i = 0; i <= 2400; i++) {
+    const nu = -Math.PI+2*Math.PI*i/2400;
+    const denominator = 1+e*Math.cos(nu);
+    const radius = semilatus/denominator;
+
+    if (denominator <= 0 || radius < R || radius > 3*R) {
+      points.push(null);
+      continue;
+    }
+
+    const angle = nu+omega;
+    points.push([
+      radius*Math.sin(angle)/1000,
+      (radius*Math.cos(angle)-R)/1000
+    ]);
+  }
+
+  return {points, e, pericenter, apocenter};
+}
+
+function showResults() {
+  const p = usedParameters;
+  const r = result;
+  $("verdict").textContent = names[r.status] +
+    (r.peak > p.limit && r.status !== "overload"
+      ? "; ограничение перегрузки также нарушено." : "");
+  $("verdict").className = r.status === "success" ? "good" : "bad";
+
+  // Накопленная угловая дальность без скачков atan2.
+  let angularRange = 0;
+  for (let i = 1; i < r.rows.length; i++) {
+    const a = r.rows[i-1], b = r.rows[i];
+    const cross = a[1]*b[2] - a[2]*b[1];
+    const dot = a[1]*b[1] + a[2]*b[2];
+    angularRange += Math.abs(Math.atan2(cross, dot));
+  }
+
+  const items = [
+    ["Угол входа", p.gamma.toFixed(3)+"°"],
+    ["Время расчётного спуска", r.t.toFixed(1)+" с"],
+    ["Максимальная перегрузка", r.peak.toFixed(3)+" g"],
+    ["Время максимума", r.peakTime.toFixed(1)+" с"],
+    ["Высота максимума", (Math.max(0,r.peakHeight)/1000).toFixed(2)+" км"],
+    ["Конечная скорость", r.finalSpeed.toFixed(1)+" м/с"],
+    ["Конечная высота", (Math.max(0,r.finalHeight)/1000).toFixed(3)+" км"],
+    ["Дальность по поверхности", (angularRange*R/1000).toFixed(1)+" км"],
+    ["Баллистический коэффициент", p.beta.toFixed(2)+" кг/м²"]
+  ];
+
+  $("metrics").replaceChildren();
+  for (const [label, value] of items) {
+    const card = document.createElement("div");
+    card.className = "metric";
+    const small = document.createElement("small");
+    small.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    card.append(small, strong);
+    $("metrics").append(card);
+  }
+
+  $("orbitInfo").textContent =
+    snapshot(p) + "\n\nНачальная оскулирующая орбита: " +
+    (orbit.apocenter === null ? "незамкнутая" : "эллиптическая") +
+    `; e=${orbit.e.toFixed(5)}.\n` +
+    `Перицентр: ${(orbit.pericenter/1000).toFixed(1)} км.` +
+    (orbit.apocenter === null ? "" :
+      ` Апоцентр: ${(orbit.apocenter/1000).toFixed(1)} км.`) +
+    (orbit.pericenter < 0 ?
+      "\nОтрицательная высота перицентра означает, что " +
+      "вакуумная орбита пересекает планету." : "");
+}
+
+function showCorridor(p, data) {
+  const box = $("corridorOutput");
+  box.replaceChildren();
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Допустимые интервалы угла входа";
+  const intro = document.createElement("pre");
+  intro.textContent = snapshot(p) +
+    `\nОбласть поиска: [${p.amin}; ${p.amax}]°; шаг ≤${p.astep}°.`;
+  box.append(heading, intro);
+
+  if (!data.intervals.length) {
+    const message = document.createElement("p");
+    message.textContent = "Допустимые углы на выбранной сетке не обнаружены.";
+    box.append(message);
+  }
+
+  data.intervals.forEach((interval, index) => {
+    const card = document.createElement("div");
+    card.className = "interval";
+
+    const text = document.createElement("div");
+    text.textContent =
+      `${index+1}. [${interval.left.toFixed(4)}; ` +
+      `${interval.right.toFixed(4)}]°; ` +
+      `ширина ${(interval.right-interval.left).toFixed(4)}°.` +
+      (interval.clippedLeft || interval.clippedRight ?
+        " Интервал касается края поиска: полная граница с этой стороны не определена." : "");
+
+    const button = document.createElement("button");
+    button.textContent = "Моделировать середину интервала";
+    button.onclick = () => {
+      if (worker) return;
+      const gamma = (interval.left+interval.right)/2;
+
+      // Восстанавливаем именно параметры этого расчёта коридора.
+      for (const id of inputIds) {
+        let value = p[id];
+        if (id === "height" || id === "scale") value /= 1000;
+        $(id).value = value;
+      }
+      $("gamma").value = gamma;
+      startJob("simulation", {...p, gamma});
+    };
+
+    card.append(text, button);
+    box.append(card);
+  });
+
+  const report = document.createElement("pre");
+  report.textContent =
+    "Первичное сканирование:\n" +
+    Object.entries(data.counts)
+      .map(([key, value]) => `${names[key]}: ${value}`)
+      .join("\n") +
+    `\n\nВсего траекторий: ${data.evaluations}.` +
+    `\nУточнение переходов: до ${data.tolerance.toFixed(4)}°.` +
+    "\n\nСетка может пропустить узкий допустимый или недопустимый " +
+    "участок. Повторите поиск с меньшим шагом углов и меньшим " +
+    "шагом интегрирования." +
+    "\n\nВыход через высоту входа означает завершение однопроходного " +
+    "спуска, но не обязательно уход из поля тяготения. " +
+    "Повторные входы здесь не рассматриваются.";
+  box.append(report);
+}
+
+/* ============================================================
+   Графика Canvas
+   ============================================================ */
+
+function prepare(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const width = Math.round(rect.width*ratio);
+  const height = Math.round(rect.height*ratio);
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  return {ctx, width: rect.width, height: rect.height};
+}
+
+function axes(canvas, bounds, xlabel, ylabel) {
+  const prepared = prepare(canvas);
+  if (!prepared) return null;
+  const {ctx, width, height} = prepared;
+  const left = 64, right = width-18, top = 28, bottom = height-48;
+  const [xmin, xmax, ymin, ymax] = bounds;
+  const X = x => left+(x-xmin)/(xmax-xmin)*(right-left);
+  const Y = y => bottom-(y-ymin)/(ymax-ymin)*(bottom-top);
+
+  ctx.font = "11px system-ui";
+  ctx.lineWidth = 1;
+
+  for (let i = 0; i <= 4; i++) {
+    const x = xmin+(xmax-xmin)*i/4;
+    const y = ymin+(ymax-ymin)*i/4;
+
+    ctx.strokeStyle = "#e3eaf1";
+    ctx.beginPath();
+    ctx.moveTo(X(x), top); ctx.lineTo(X(x), bottom);
+    ctx.moveTo(left, Y(y)); ctx.lineTo(right, Y(y));
+    ctx.stroke();
+
+    ctx.fillStyle = "#526378";
+    ctx.textAlign = "center";
+    ctx.fillText(formatTick(x), X(x), bottom+19);
+    ctx.textAlign = "right";
+    ctx.fillText(formatTick(y), left-8, Y(y)+4);
+  }
+
+  ctx.fillStyle = "#172638";
+  ctx.textAlign = "center";
+  ctx.fillText(xlabel, (left+right)/2, height-7);
+  ctx.textAlign = "left";
+  ctx.fillText(ylabel, left, 15);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left, top, right-left, bottom-top);
+  ctx.clip();
+
+  return {ctx, X, Y, left, right, top, bottom};
+}
+
+function formatTick(value) {
+  if (Math.abs(value) >= 100) return value.toFixed(0);
+  if (Math.abs(value) >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+function line(plot, points, color, dash = [], width = 2) {
+  const {ctx, X, Y} = plot;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.setLineDash(dash);
+  ctx.beginPath();
+  let started = false;
+
+  for (const point of points) {
+    if (!point || !point.every(Number.isFinite)) {
+      started = false;
+      continue;
+    }
+    if (!started) {
+      ctx.moveTo(X(point[0]), Y(point[1]));
+      started = true;
+    } else ctx.lineTo(X(point[0]), Y(point[1]));
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function marker(plot, x, y, color, radius = 5) {
+  plot.ctx.fillStyle = color;
+  plot.ctx.beginPath();
+  plot.ctx.arc(plot.X(x), plot.Y(y), radius, 0, 2*Math.PI);
+  plot.ctx.fill();
+}
+
+function sampleAt(time) {
+  const rows = result.rows;
+  let lo = 0, hi = rows.length-1;
+  while (lo < hi) {
+    const mid = Math.ceil((lo+hi)/2);
+    if (rows[mid][0] <= time) lo = mid;
+    else hi = mid-1;
+  }
+
+  const a = rows[lo];
+  const b = rows[Math.min(lo+1, rows.length-1)];
+  const w = b[0] === a[0] ? 0 :
+    Math.max(0, Math.min(1, (time-a[0])/(b[0]-a[0])));
+
+  return {
+    index: lo,
+    row: a.map((value, i) => value+w*(b[i]-value))
+  };
+}
+
+function drawTrajectory(sample) {
+  const rows = result.rows;
+  let xmin = Infinity, xmax = -Infinity;
+  let ymin = Infinity, ymax = -Infinity;
+
+  for (const row of rows) {
+    const x = row[2]/1000, y = (row[1]-R)/1000;
+    xmin = Math.min(xmin, x); xmax = Math.max(xmax, x);
+    ymin = Math.min(ymin, y); ymax = Math.max(ymax, y);
+  }
+
+  const dx = Math.max(100, xmax-xmin);
+  const dy = Math.max(100, ymax-ymin);
+
+  const plot = axes(
+    $("trajectoryCanvas"),
+    [xmin-0.08*dx, xmax+0.08*dx, ymin-0.12*dy, ymax+0.12*dy],
+    "y, км", "x − R, км"
+  );
+  if (!plot) return;
+
+  const surface = [], boundary = [];
+  for (let i = 0; i <= 2400; i++) {
+    const a = -Math.PI+2*Math.PI*i/2400;
+    surface.push([R*Math.sin(a)/1000, (R*Math.cos(a)-R)/1000]);
+    const radius = R+usedParameters.height;
+    boundary.push([
+      radius*Math.sin(a)/1000,
+      (radius*Math.cos(a)-R)/1000
+    ]);
+  }
+
+  line(plot, surface, "#36835c", [], 2);
+  line(plot, boundary, "#75bbd6", [5, 5], 1);
+  line(plot, orbit.points, "#9b9fa6", [6, 5], 1.5);
+
+  const path = rows.slice(0, sample.index+1)
+    .map(row => [row[2]/1000, (row[1]-R)/1000]);
+  path.push([sample.row[2]/1000, (sample.row[1]-R)/1000]);
+
+  line(plot, path, "#176bc0", [], 2.5);
+  marker(plot, 0, usedParameters.height/1000, "#168247");
+  marker(plot, sample.row[2]/1000,
+    (sample.row[1]-R)/1000, "#c73743");
+
+  plot.ctx.restore();
+}
+
+function drawTimeChart(sample, load) {
+  const p = usedParameters;
+  const peak = load
+    ? Math.max(result.peak, p.limit)*1.15
+    : p.speed/1000*1.15;
+
+  // Начальная скорость не всегда является максимальной.
+  let ymax = Math.max(peak, 0.1);
+  if (!load) {
+    for (const row of result.rows) ymax = Math.max(ymax, row[6]/1000*1.1);
+  }
+
+  const canvas = $(load ? "loadCanvas" : "speedCanvas");
+  const plot = axes(
+    canvas,
+    [0, Math.max(result.t, 1), 0, ymax],
+    "Время, с", load ? "Перегрузка, g" : "Скорость, км/с"
+  );
+  if (!plot) return;
+
+  if (load) {
+    line(plot, [[0,p.limit], [result.t,p.limit]], "#c73743", [6,4], 1.5);
+    marker(plot, result.peakTime, result.peak, "#c73743", 3);
+  }
+
+  const column = load ? 7 : 6;
+  const factor = load ? 1 : 0.001;
+  const points = result.rows.slice(0, sample.index+1)
+    .map(row => [row[0], row[column]*factor]);
+  points.push([sample.row[0], sample.row[column]*factor]);
+
+  line(plot, points, load ? "#d27c17" : "#176bc0");
+  marker(plot, sample.row[0], sample.row[column]*factor, "#172638", 4);
+  plot.ctx.restore();
+}
+
+function draw() {
+  if (!result) {
+    const canvasId = {
+      trajectory: "trajectoryCanvas",
+      speedView: "speedCanvas",
+      loadView: "loadCanvas"
+    }[activeTab];
+    if (canvasId) {
+      const prepared = prepare($(canvasId));
+      if (prepared) {
+        prepared.ctx.fillStyle = "#68788a";
+        prepared.ctx.font = "15px system-ui";
+        prepared.ctx.fillText("Запустите моделирование спуска.", 18, 45);
+      }
+    }
+    return;
+  }
+
+  const sample = sampleAt(currentTime);
+  $("seek").value = currentTime;
+  $("frameInfo").textContent =
+    `t = ${currentTime.toFixed(1)} с; ` +
+    `h = ${(Math.max(0,sample.row[5])/1000).toFixed(2)} км; ` +
+    `v = ${sample.row[6].toFixed(0)} м/с; ` +
+    `n = ${sample.row[7].toFixed(2)} g`;
+
+  if (activeTab === "trajectory") drawTrajectory(sample);
+  else if (activeTab === "speedView") drawTimeChart(sample, false);
+  else if (activeTab === "loadView") drawTimeChart(sample, true);
+}
+
+function animationFrame(timestamp) {
+  if (playing && result) {
+    if (previousFrame !== null) {
+      const elapsed = Math.min((timestamp-previousFrame)/1000, 0.1);
+      currentTime = Math.min(
+        result.t,
+        currentTime+elapsed*Number($("rate").value)
+      );
+    }
+    previousFrame = timestamp;
+    draw();
+
+    if (currentTime >= result.t) stopPlayback();
+  }
+  requestAnimationFrame(animationFrame);
+}
+
+document.addEventListener("visibilitychange", () => {
+  previousFrame = null;
+});
+
+window.addEventListener("resize", draw);
+
+draw();
+requestAnimationFrame(animationFrame);
+</script>
 </body>
 </html>
